@@ -8,5 +8,5 @@ if __name__ == "__main__":
 
     superobot = sr.TwitchChatBot(auth["user"], auth["oauth"])
     superobot.join("#sym_okami")
-    # superobot.join("#seal1234")
+    superobot.join("#seal1234")
     superobot.listen()

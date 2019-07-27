@@ -94,9 +94,6 @@ class TwitchChatBot:
                 self.at_msg(username, "You roll: " + str(total), channel)
             else:
                 self.at_msg(username, "Please use the form: !dice xdy + z", channel)
-        elif command == "spam":
-            self.batch_send_msg(["test", "test2", "test3", "test4", "test5"],
-            channel)
 
     def at_msg(self, username, message, channel):
         self.send_msg("@" + username + " " + message, channel)
@@ -199,5 +196,5 @@ class ChatWorker(Thread):
         self.condition.acquire()
         while True:
             self.send_queued_data()
-            self.condition.wait()
+            self.condition.wait(1)
         self.condition.release()
