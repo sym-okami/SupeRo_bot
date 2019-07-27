@@ -2,6 +2,7 @@ import socket
 import re
 import random
 import time
+import traceback
 import colorama
 from colorama import Fore, Style
 
@@ -15,6 +16,9 @@ def parse_tags(tags):
         tag,content = tag_pair.split("=")
         tag_dict[tag] = content
     return tag_dict
+
+def encodeb(message):
+    return bytes(message, 'utf-8')
 
 class TwitchChatBot:
     def __init__(self, user, oauth):
@@ -38,14 +42,14 @@ class TwitchChatBot:
                         print(f'{Fore.GREEN}RECV: ' + data.strip() + 
                         f'{Style.RESET_ALL}')
                         self.parse_message(data)
-                except Exception as e:
-                    print(f'{Fore.RED} Something went wrong: ' + str(e) + 
-                    f'{Style.RESET_ALL}')
+                except Exception:
+                    print(f'{Fore.RED}Something went wrong: ' + 
+                    traceback.format_exc() + f'{Style.RESET_ALL}')
 
     def parse_message(self, message):
         if "PRIVMSG" in message:
             chunks = message.split(":")
-            tags = parse_tags(chunks[0])
+            # tags = parse_tags(chunks[0])
             head = chunks[1]
             user_message = chunks[2].strip()
 
@@ -87,17 +91,19 @@ class TwitchChatBot:
             else:
                 self.at_msg(username, "Please use the form: !dice xdy + z", channel)
         elif command == "spam":
-            self.send_msg("test", channel)
-            self.send_msg("test2", channel)
-            self.send_msg("test3", channel)
-            self.send_msg("test4", channel)
-            self.send_msg("test5", channel)
+            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test')
+            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test2')
+            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test3')
+            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test4')
+            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test5')
+            self.workers[channel].send_queued_data()
 
     def at_msg(self, username, message, channel):
         self.send_msg("@" + username + " " + message, channel)
 
     def send_msg(self, message, channel):
-        self.workers[channel].send_data('PRIVMSG ' + channel + ' :' + message)
+        self.workers[channel].queue_data('PRIVMSG ' + channel + ' :' + message)
+        self.workers[channel].send_queued_data()
 
 class ChatWorker:
     def __init__(self, user, oauth, channel, verbose=False):
@@ -105,6 +111,9 @@ class ChatWorker:
         self.oauth = oauth
         self.channel = channel
         self.is_mod = False
+        self.msg_q = []
+        self.timestamps = []
+        self.last_sent = time.time() - 10
         self.verbose = verbose
         self.socket = socket.socket()
         self.connect()
@@ -136,11 +145,41 @@ class ChatWorker:
         tags = parse_tags(chunks[0])
         if tags["mod"] == "1":
             self.is_mod = True
+        else:
+            self.is_mod = False
+
+    def get_rate_limit(self):
+        if self.is_mod:
+            return 0.1
+        else:
+            return 1.1
+
+    def get_msg_limit(self):
+        if self.is_mod:
+            return 100
+        else:
+            return 20
+
+    def queue_data(self, message):
+        self.msg_q.append(message)
+
+    def send_queued_data(self, silent=False):
+        if len(self.timestamps) > 0:
+            while self.timestamps[0] - time.time() > 30:
+                self.timestamps.pop()
+        while len(self.msg_q) > 0:
+            if len(self.timestamps) < self.get_msg_limit():
+                time_since_last = time.time() - self.last_sent
+                if time_since_last < self.get_rate_limit():
+                    time.sleep(self.get_rate_limit() - time_since_last)
+                self.send_data(self.msg_q[0], silent)               
+                self.timestamps.append(time.time())
+                self.last_sent = time.time()
+                self.msg_q = self.msg_q[1:]
+            else:
+                break
 
     def send_data(self, message, silent=False):
-        self.socket.send(self.encodeb(message + '\r\n'))
+        self.socket.send(encodeb(message + '\r\n'))
         if not silent and self.verbose:
             print(f'{Fore.YELLOW}SENT: ' + message + f'{Style.RESET_ALL}')
-
-    def encodeb(self, message):
-        return bytes(message, 'utf-8')
