@@ -8,6 +8,14 @@ from colorama import Fore, Style
 # Always initialize colorama
 colorama.init()
 
+### Utility functions go here :)
+def parse_tags(tags):
+    tag_dict = {}
+    for tag_pair in tags.split(";"):
+        tag,content = tag_pair.split("=")
+        tag_dict[tag] = content
+    return tag_dict
+
 class TwitchChatBot:
     def __init__(self, user, oauth):
         self.user = user
@@ -27,7 +35,7 @@ class TwitchChatBot:
                 try:
                     data = worker.recv()
                     if data:
-                        print(f'{Fore.GREEN}SENT: ' + data.strip() + 
+                        print(f'{Fore.GREEN}RECV: ' + data.strip() + 
                         f'{Style.RESET_ALL}')
                         self.parse_message(data)
                 except Exception as e:
@@ -36,13 +44,13 @@ class TwitchChatBot:
 
     def parse_message(self, message):
         if "PRIVMSG" in message:
-            chunks = message[1:].split(":")
-            head = chunks[0]
-            tail = chunks[1]
-            
+            chunks = message.split(":")
+            tags = parse_tags(chunks[0])
+            head = chunks[1]
+            user_message = chunks[2].strip()
+
             username = head.split("!")[0]
             channel = head.split(" ")[2]
-            user_message = tail.strip()
             
             # do the things here
             if "supero_bot" in user_message.lower():
@@ -91,14 +99,12 @@ class TwitchChatBot:
     def send_msg(self, message, channel):
         self.workers[channel].send_data('PRIVMSG ' + channel + ' :' + message)
 
-    def encodeb(self, message):
-        return bytes(message, 'utf-8')
-
 class ChatWorker:
     def __init__(self, user, oauth, channel, verbose=False):
         self.user = user
         self.oauth = oauth
         self.channel = channel
+        self.is_mod = False
         self.verbose = verbose
         self.socket = socket.socket()
         self.connect()
@@ -108,17 +114,28 @@ class ChatWorker:
         self.send_data('PASS ' + self.oauth, silent=True)
         self.send_data('NICK ' + self.user, silent=True)
         self.send_data('JOIN ' + self.channel, silent=True)
+        self.send_data('CAP REQ :twitch.tv/membership', silent=True)
+        self.send_data('CAP REQ :twitch.tv/tags', silent=True)
+        self.send_data('CAP REQ :twitch.tv/commands', silent=True)
 
     def recv(self):
         data = self.socket.recv(2048).decode('utf-8', 'ignore')
         if data.strip() == "PING :tmi.twitch.tv":
             self.pong()
             return None
+        elif "USERSTATE" in data:
+            self.check_mod(data)
         else:
             return data
 
     def pong(self):
         self.send_data("PONG :tmi.twitch.tv", silent=True)
+
+    def check_mod(self, data):
+        chunks = data.split(" ")
+        tags = parse_tags(chunks[0])
+        if tags["mod"] == "1":
+            self.is_mod = True
 
     def send_data(self, message, silent=False):
         self.socket.send(self.encodeb(message + '\r\n'))
