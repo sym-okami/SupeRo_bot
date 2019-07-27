@@ -29,60 +29,69 @@ class TwitchChatBot:
         self.workers = {}
         self.last_timer = time.time()
 
-    def join(self, channel):
+    def join(self, channel, verbose=False):
         self.workers[channel] = ChatWorker(self.user, self.oauth, channel,
-        verbose=True)
+        verbose=verbose)
         self.workers[channel].start()
         self.workers[channel].send_data('JOIN ' + channel)
 
     def listen(self):
+        for channel in self.workers:
+            worker_listener = Thread(target = self.listen_to_worker,
+            args = (channel,))
+            worker_listener.start()
+
+    def listen_to_worker(self, channel):
+        worker = self.workers[channel]
         while True:
-            for channel in self.workers:
-                worker = self.workers[channel]
-                try:
-                    data = worker.recv()
-                    if data:
-                        print(f'{Fore.GREEN}RECV: ' + data.strip() + 
-                        f'{Style.RESET_ALL}')
-                        thread = Thread(target = self.parse_message,
-                        args = (data, ))
-                        thread.start()
-                        # self.parse_message(data)
-                except Exception:
-                    print(f'{Fore.RED}Something went wrong: ' + 
-                    traceback.format_exc() + f'{Style.RESET_ALL}')
+            try:
+                messages = worker.recv()
+                if messages:
+                    messages = list(filter(lambda x: len(x) > 0, 
+                    map(str.strip, messages)))
+                    print(f'{Fore.GREEN}RECV: ' + '\r\n'.join(messages) + 
+                    f'{Style.RESET_ALL}')
+                    thread = Thread(target = self.parse_message,
+                    args = (messages, ))
+                    thread.start()
+                else:
+                    continue
+            except Exception:
+                print(f'{Fore.RED}Something went wrong: ' + 
+                traceback.format_exc() + f'{Style.RESET_ALL}')
 
-    def parse_message(self, message):
-        if "PRIVMSG" in message:
-            chunks = message.split(":")
-            # tags = parse_tags(chunks[0])
-            head = chunks[1]
-            user_message = chunks[2].strip()
+    def parse_message(self, messages):
+        for message in messages:
+            if "PRIVMSG" in message:
+                chunks = message.split(":")
+                # tags = parse_tags(chunks[0])
+                head = chunks[1]
+                user_message = chunks[2].strip()
 
-            username = head.split("!")[0]
-            channel = head.split(" ")[2]
-            
-            # do the things here
-            if "supero_bot" in user_message.lower():
-                self.at_msg(username, ":)", channel)
-            elif "anime" in user_message.lower() and channel == "#sym_okami":
-                self.send_msg("/timeout " + username + " 60", channel)
-                self.at_msg(username, "The proper term is Japanimation.", channel)
-            elif "meguHands" in user_message or "seal12MH" in user_message:
-                checktime = time.time()
-                if checktime - self.last_timer > 15:
-                    self.send_msg("meguHands", channel)
-                    self.last_timer = checktime
-            elif user_message.startswith("!"):
-                self.run_command(username, channel, user_message[1:])
+                username = head.split("!")[0]
+                channel = head.split(" ")[2]
+                
+                # do the things here
+                if "supero_bot" in user_message.lower():
+                    self.at_msg(username, ":)", channel)
+                elif "anime" in user_message.lower() and channel == "#sym_okami":
+                    self.send_msg("/timeout " + username + " 60", channel)
+                    self.at_msg(username, "The proper term is Japanimation.", channel)
+                elif "meguHands" in user_message or "seal12MH" in user_message:
+                    checktime = time.time()
+                    if checktime - self.last_timer > 15:
+                        self.send_msg("meguHands", channel)
+                        self.last_timer = checktime
+                elif user_message.startswith("!"):
+                    self.run_command(username, channel, user_message[1:])
 
     def run_command(self, username, channel, command):
-        commands = ["!command", "!dice xdy + z"]
+        commands = ["!command", "!dice {x}d{y} + {z}", "!roll {n}"]
         if command.startswith("commands"):
             self.at_msg(username, "The following commands are available: " +
                         str(commands)[1:-1], channel)
         elif command.startswith("dice"):
-            pattern = r"(\d+)\s*d\s*(\d+)\s*\+?\s*(\d+)?"
+            pattern = r"(\d+)\s*d\s*(\d+)\s*\+?\s*(\d+)?.+?"
             match = re.search(pattern, command[5:])
             if match:
                 numdice = match.group(1)
@@ -94,6 +103,15 @@ class TwitchChatBot:
                 self.at_msg(username, "You roll: " + str(total), channel)
             else:
                 self.at_msg(username, "Please use the form: !dice xdy + z", channel)
+        elif command.startswith("roll"):
+            pattern = r"roll\s+(\d+).+?"
+            match = re.search(pattern, command)
+            if match:
+                n = int(match.group(1))
+                self.at_msg(username, "You roll: " + str(random.randint(1, n)),
+                    channel)
+            else:
+                self.at_msg(username, "Please use the form: !roll n", channel)
 
     def at_msg(self, username, message, channel):
         self.send_msg("@" + username + " " + message, channel)
@@ -137,20 +155,28 @@ class ChatWorker(Thread):
 
     def recv(self):
         data = self.socket.recv(2048).decode('utf-8', 'ignore')
-        if data.strip() == "PING :tmi.twitch.tv":
-            self.pong()
-            return None
-        elif "USERSTATE" in data:
-            self.check_mod(data)
-        else:
-            return data
+        messages = data.split('\r\n')
+        for message in messages:
+            if message.strip() == "PING :tmi.twitch.tv":
+                self.pong()
+                return None
+            elif "USERSTATE" in message:
+                self.check_mod(message)
+            else:
+                pass
+        return messages
 
     def pong(self):
         self.send_data("PONG :tmi.twitch.tv", silent=True)
 
     def check_mod(self, data):
         chunks = data.split(" ")
-        tags = parse_tags(chunks[0])
+        try:
+            tags = parse_tags(chunks[0])
+        except Exception:
+            print(traceback.format_exc())
+            print(f'{Fore.MAGENTA}' + data + f'{Style.RESET_ALL}')
+            return {}
         if tags["mod"] == "1":
             self.is_mod = True
         else:
