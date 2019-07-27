@@ -5,6 +5,8 @@ import time
 import traceback
 import colorama
 from colorama import Fore, Style
+import threading
+from threading import Thread
 
 # Always initialize colorama
 colorama.init()
@@ -30,6 +32,7 @@ class TwitchChatBot:
     def join(self, channel):
         self.workers[channel] = ChatWorker(self.user, self.oauth, channel,
         verbose=True)
+        self.workers[channel].start()
         self.workers[channel].send_data('JOIN ' + channel)
 
     def listen(self):
@@ -41,7 +44,10 @@ class TwitchChatBot:
                     if data:
                         print(f'{Fore.GREEN}RECV: ' + data.strip() + 
                         f'{Style.RESET_ALL}')
-                        self.parse_message(data)
+                        thread = Thread(target = self.parse_message,
+                        args = (data, ))
+                        thread.start()
+                        # self.parse_message(data)
                 except Exception:
                     print(f'{Fore.RED}Something went wrong: ' + 
                     traceback.format_exc() + f'{Style.RESET_ALL}')
@@ -76,9 +82,7 @@ class TwitchChatBot:
             self.at_msg(username, "The following commands are available: " +
                         str(commands)[1:-1], channel)
         elif command.startswith("dice"):
-            print("IN DICE")
             pattern = r"(\d+)\s*d\s*(\d+)\s*\+?\s*(\d+)?"
-            print(command[5:])
             match = re.search(pattern, command[5:])
             if match:
                 numdice = match.group(1)
@@ -91,22 +95,28 @@ class TwitchChatBot:
             else:
                 self.at_msg(username, "Please use the form: !dice xdy + z", channel)
         elif command == "spam":
-            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test')
-            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test2')
-            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test3')
-            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test4')
-            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :test5')
-            self.workers[channel].send_queued_data()
+            self.batch_send_msg(["test", "test2", "test3", "test4", "test5"],
+            channel)
 
     def at_msg(self, username, message, channel):
         self.send_msg("@" + username + " " + message, channel)
 
-    def send_msg(self, message, channel):
-        self.workers[channel].queue_data('PRIVMSG ' + channel + ' :' + message)
-        self.workers[channel].send_queued_data()
+    def batch_send_msg(self, messages, channel):
+        self.workers[channel].condition.acquire()
+        for message in messages:
+            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :' + message)
+        self.workers[channel].condition.notify()
+        self.workers[channel].condition.release()
 
-class ChatWorker:
+    def send_msg(self, message, channel):
+        self.workers[channel].condition.acquire()
+        self.workers[channel].queue_data('PRIVMSG ' + channel + ' :' + message)
+        self.workers[channel].condition.notify()
+        self.workers[channel].condition.release()
+
+class ChatWorker(Thread):
     def __init__(self, user, oauth, channel, verbose=False):
+        Thread.__init__(self)
         self.user = user
         self.oauth = oauth
         self.channel = channel
@@ -115,6 +125,7 @@ class ChatWorker:
         self.timestamps = []
         self.last_sent = time.time() - 10
         self.verbose = verbose
+        self.condition = threading.Condition()
         self.socket = socket.socket()
         self.connect()
 
@@ -183,3 +194,10 @@ class ChatWorker:
         self.socket.send(encodeb(message + '\r\n'))
         if not silent and self.verbose:
             print(f'{Fore.YELLOW}SENT: ' + message + f'{Style.RESET_ALL}')
+
+    def run(self):
+        self.condition.acquire()
+        while True:
+            self.send_queued_data()
+            self.condition.wait()
+        self.condition.release()
