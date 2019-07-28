@@ -91,7 +91,7 @@ class TwitchChatBot:
             self.at_msg(username, "The following commands are available: " +
                         str(commands)[1:-1], channel)
         elif command.startswith("dice"):
-            pattern = r"(\d+)\s*d\s*(\d+)\s*\+?\s*(\d+)?.+?"
+            pattern = r"(\d+)\s*d\s*(\d+)\s*\+?\s*(\d+)?"
             match = re.search(pattern, command[5:])
             if match:
                 numdice = match.group(1)
@@ -104,7 +104,7 @@ class TwitchChatBot:
             else:
                 self.at_msg(username, "Please use the form: !dice xdy + z", channel)
         elif command.startswith("roll"):
-            pattern = r"roll\s+(\d+).+?"
+            pattern = r"roll\s+(\d+)"
             match = re.search(pattern, command)
             if match:
                 n = int(match.group(1))
