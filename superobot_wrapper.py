@@ -6,7 +6,7 @@ if __name__ == "__main__":
     with open("./bot_auth.json") as f:
         auth = json.load(f)
 
-    superobot = sr.TwitchChatBot(auth["user"], auth["oauth"])
-    superobot.join("#sym_okami")
-    superobot.join("#seal1234", verbose=False)
+    superobot = sr.SupeRo_Bot(auth["user"], auth["oauth"])
+    for channel in auth["channels"]:
+        superobot.join(channel, verbose=True)
     superobot.listen()

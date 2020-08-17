@@ -1,95 +1,32 @@
-import socket
 import re
 import random
+import sys
 import time
-import traceback
-import colorama
-from colorama import Fore, Style
-import threading
-from threading import Thread
+sys.path.append('../GetterCore')
+import gettercore
 
-# Always initialize colorama
-colorama.init()
-
-### Utility functions go here :)
-def parse_tags(tags):
-    tag_dict = {}
-    for tag_pair in tags.split(";"):
-        tag,content = tag_pair.split("=")
-        tag_dict[tag] = content
-    return tag_dict
-
-def encodeb(message):
-    return bytes(message, 'utf-8')
-
-class TwitchChatBot:
+class SupeRo_Bot(gettercore.GetterCore):
     def __init__(self, user, oauth):
-        self.user = user
-        self.oauth = oauth
-        self.workers = {}
-        self.last_timer = time.time()
+        gettercore.GetterCore.__init__(self, user, oauth)
+        self.megu_timer = time.time() - 50
 
-    def join(self, channel, verbose=False):
-        self.workers[channel] = ChatWorker(self.user, self.oauth, channel,
-        verbose=verbose)
-        self.workers[channel].start()
-        self.workers[channel].send_data('JOIN ' + channel)
+    def on_mention(self, user_message, username, channel):
+        if "meguHands" in user_message or "seal12MH" in user_message:
+            self.send_msg("@{} meguHands".format(username), channel)
+        else:
+            self.send_msg("@{} :)".format(username), channel)
 
-    def listen(self):
-        for channel in self.workers:
-            worker_listener = Thread(target = self.listen_to_worker,
-            args = (channel,))
-            worker_listener.start()
-
-    def listen_to_worker(self, channel):
-        worker = self.workers[channel]
-        while True:
-            try:
-                messages = worker.recv()
-                if messages:
-                    messages = list(filter(lambda x: len(x) > 0, 
-                    map(str.strip, messages)))
-                    print(f'{Fore.GREEN}RECV: ' + '\r\n'.join(messages) + 
-                    f'{Style.RESET_ALL}')
-                    thread = Thread(target = self.parse_message,
-                    args = (messages, ))
-                    thread.start()
-                else:
-                    continue
-            except Exception:
-                print(f'{Fore.RED}Something went wrong: ' + 
-                traceback.format_exc() + f'{Style.RESET_ALL}')
-
-    def parse_message(self, messages):
-        for message in messages:
-            if "PRIVMSG" in message:
-                chunks = message.split(":")
-                # tags = parse_tags(chunks[0])
-                head = chunks[1]
-                user_message = chunks[2].strip()
-
-                username = head.split("!")[0]
-                channel = head.split(" ")[2]
-                
-                # do the things here
-                if "supero_bot" in user_message.lower():
-                    self.at_msg(username, ":)", channel)
-                elif "anime" in user_message.lower() and channel == "#sym_okami":
-                    self.send_msg("/timeout " + username + " 60", channel)
-                    self.at_msg(username, "The proper term is Japanimation.", channel)
-                elif "meguHands" in user_message or "seal12MH" in user_message:
-                    checktime = time.time()
-                    if checktime - self.last_timer > 15:
-                        self.send_msg("meguHands", channel)
-                        self.last_timer = checktime
-                elif user_message.startswith("!"):
-                    self.run_command(username, channel, user_message[1:])
-
-    def run_command(self, username, channel, command):
-        commands = ["!command", "!dice {x}d{y} + {z}", "!roll {n}"]
+    def run_command(self, user_message, username, channel):
+        # list of commands
+        commands = ["!command", "!dice {x}d{y} + {z}", "!roll {n}",
+        "!8ball {question}", "!birdgirl", "!bttv", "!% {question}"]
+        command = user_message[1:] # remove !
+        
         if command.startswith("commands"):
-            self.at_msg(username, "The following commands are available: " +
-                        str(commands)[1:-1], channel)
+            self.send_msg("@{} Here are my functionalities: {}".format(
+                username, str(commands)[1:-1]
+            ), channel)
+        
         elif command.startswith("dice"):
             pattern = r"(\d+)\s*d\s*(\d+)\s*\+?\s*(\d+)?"
             match = re.search(pattern, command[5:])
@@ -100,127 +37,53 @@ class TwitchChatBot:
                 total = int(numdice) * random.randint(1, int(die))
                 if modifier != None:
                     total += int(modifier)
-                self.at_msg(username, "You roll: " + str(total), channel)
+                self.send_msg("@{} You roll: {}".format(username, total), 
+                channel)
             else:
-                self.at_msg(username, "Please use the form: !dice xdy + z", channel)
+                self.send_msg("@{} Please use this format: !dice 2d10 + 3", 
+                channel)
+
         elif command.startswith("roll"):
             pattern = r"roll\s+(\d+)"
             match = re.search(pattern, command)
             if match:
                 n = int(match.group(1))
-                self.at_msg(username, "You roll: " + str(random.randint(1, n)),
-                    channel)
+                self.send_msg("@{} {}".format(username, random.randint(1, n)),
+                channel)
             else:
-                self.at_msg(username, "Please use the form: !roll n", channel)
+                self.send_msg("@{} Please use this format: !roll 10", channel)
 
-    def at_msg(self, username, message, channel):
-        self.send_msg("@" + username + " " + message, channel)
+        elif command.startswith("8ball"):
+            results = ['All signs point to yes...', 'Yes!', 
+            'My sources say nope.', 'You may rely on it.', 
+            'Concentrate and ask again...', 'Outlook not so good...', 
+            'It is decidedly so!', 'Better not tell you.', 'Very doubtful.', 
+            'Yes - Definitely!', 'It is certain!', 'Most likely.', 
+            'Ask again later.', 'No!', 'Outlook good.', 'Don\'t count on it.']
+            self.send_msg("@{} :8ball: {}".format(username, 
+            random.choice(results)), channel)
 
-    def batch_send_msg(self, messages, channel):
-        self.workers[channel].condition.acquire()
-        for message in messages:
-            self.workers[channel].queue_data('PRIVMSG ' + channel + ' :' + message)
-        self.workers[channel].condition.notify()
-        self.workers[channel].condition.release()
+        elif command.startswith("birdgirl"):
+            bg = ["https://imgur.com/SesEqKJ", " https://imgur.com/UDvEAyA", 
+            "https://imgur.com/nkRwkQh", "https://imgur.com/4D8u2LD"]
+            self.send_msg(random.choice(bg), channel)
 
-    def send_msg(self, message, channel):
-        self.workers[channel].condition.acquire()
-        self.workers[channel].queue_data('PRIVMSG ' + channel + ' :' + message)
-        self.workers[channel].condition.notify()
-        self.workers[channel].condition.release()
+        elif command.startswith("bttv"):
+            emotes = self.fetch_url(
+                "https://twitch.center/customapi/bttvemotes?channel={}".
+                format(channel[1:]))
+            self.send_msg(emotes, channel)
 
-class ChatWorker(Thread):
-    def __init__(self, user, oauth, channel, verbose=False):
-        Thread.__init__(self)
-        self.user = user
-        self.oauth = oauth
-        self.channel = channel
-        self.is_mod = False
-        self.msg_q = []
-        self.timestamps = []
-        self.last_sent = time.time() - 10
-        self.verbose = verbose
-        self.condition = threading.Condition()
-        self.socket = socket.socket()
-        self.connect()
+        elif command.startswith("%"):
+            self.send_msg("@{} {}%".format(username, random.randint(0, 100)),
+            channel)
 
-    def connect(self):
-        self.socket.connect(('irc.chat.twitch.tv', 6667))
-        self.send_data('PASS ' + self.oauth, silent=True)
-        self.send_data('NICK ' + self.user, silent=True)
-        self.send_data('JOIN ' + self.channel, silent=True)
-        self.send_data('CAP REQ :twitch.tv/membership', silent=True)
-        self.send_data('CAP REQ :twitch.tv/tags', silent=True)
-        self.send_data('CAP REQ :twitch.tv/commands', silent=True)
-
-    def recv(self):
-        data = self.socket.recv(2048).decode('utf-8', 'ignore')
-        messages = data.split('\r\n')
-        for message in messages:
-            if message.strip() == "PING :tmi.twitch.tv":
-                self.pong()
-                return None
-            elif "USERSTATE" in message:
-                self.check_mod(message)
-            else:
-                pass
-        return messages
-
-    def pong(self):
-        self.send_data("PONG :tmi.twitch.tv", silent=True)
-
-    def check_mod(self, data):
-        chunks = data.split(" ")
-        try:
-            tags = parse_tags(chunks[0])
-        except Exception:
-            print(traceback.format_exc())
-            print(f'{Fore.MAGENTA}' + data + f'{Style.RESET_ALL}')
-            return {}
-        if tags["mod"] == "1":
-            self.is_mod = True
-        else:
-            self.is_mod = False
-
-    def get_rate_limit(self):
-        if self.is_mod:
-            return 0.1
-        else:
-            return 1.1
-
-    def get_msg_limit(self):
-        if self.is_mod:
-            return 100
-        else:
-            return 20
-
-    def queue_data(self, message):
-        self.msg_q.append(message)
-
-    def send_queued_data(self, silent=False):
-        if len(self.timestamps) > 0:
-            while self.timestamps[0] - time.time() > 30:
-                self.timestamps.pop()
-        while len(self.msg_q) > 0:
-            if len(self.timestamps) < self.get_msg_limit():
-                time_since_last = time.time() - self.last_sent
-                if time_since_last < self.get_rate_limit():
-                    time.sleep(self.get_rate_limit() - time_since_last)
-                self.send_data(self.msg_q[0], silent)               
-                self.timestamps.append(time.time())
-                self.last_sent = time.time()
-                self.msg_q = self.msg_q[1:]
-            else:
-                break
-
-    def send_data(self, message, silent=False):
-        self.socket.send(encodeb(message + '\r\n'))
-        if not silent and self.verbose:
-            print(f'{Fore.YELLOW}SENT: ' + message + f'{Style.RESET_ALL}')
-
-    def run(self):
-        self.condition.acquire()
-        while True:
-            self.send_queued_data()
-            self.condition.wait(1)
-        self.condition.release()
+    def handle_message(self, user_message, username, channel):
+        if "anime" in user_message.lower():
+            self.send_msg("@{} the proper term is Japanimation.".
+            format(username), channel)
+        elif "meguHands" in user_message or "seal12MH" in user_message:
+            checktime = time.time()
+            if checktime - self.megu_timer > 15:
+                self.send_msg("meguHands", channel)
+                self.megu_timer = checktime
