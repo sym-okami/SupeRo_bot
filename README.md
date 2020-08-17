@@ -10,6 +10,7 @@ to actively develop it.
 As of the latest update, this code relies on my 
 [GetterCore library](https://github.com/sym-okami/GetterCore). It should be 
 cloned to the same top-level directory as SupeRo_bot.
+Python 3.6+, may work with earlier but I was developing on 3.6.2.
 
 ## bot_auth.json format
 The superobot_wrapper expects a file named bot_auth.json to be placed in the 
