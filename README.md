@@ -14,10 +14,11 @@ cloned to the same top-level directory as SupeRo_bot.
 ## bot_auth.json format
 The superobot_wrapper expects a file named bot_auth.json to be placed in the 
 same directory. The contents should be structured as such:
-{
-    "user": "{twitchUserName}",
-    "oauth": "oauth:{oauthKey}",
-    "channels": ["#{channel1}", "#{channel2}"]
+
+{\
+    "user": "{twitchUserName}",\
+    "oauth": "oauth:{oauthKey}",\
+    "channels": ["#{channel1}", "#{channel2}"]\
 }
 
 where anything within the curly braces should be replaced with the appropriate 
