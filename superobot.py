@@ -9,6 +9,7 @@ class SupeRo_Bot(gettercore.GetterCore):
     def __init__(self, user, oauth):
         gettercore.GetterCore.__init__(self, user, oauth)
         self.megu_timer = time.time() - 50
+        self.seal_spotted_timer = time.time() - 50
 
     def on_mention(self, user_message, username, channel):
         if "meguHands" in user_message or "seal12MH" in user_message:
@@ -18,7 +19,7 @@ class SupeRo_Bot(gettercore.GetterCore):
 
     def run_command(self, user_message, username, channel):
         # list of commands
-        commands = ["!command", "!dice {x}d{y} + {z}", "!roll {n}",
+        commands = ["!commands", "!dice {x}d{y} + {z}", "!roll {n}",
         "!8ball {question}", "!birdgirl", "!bttv", "!% {question}"]
         command = user_message[1:] # remove !
         
@@ -87,3 +88,8 @@ class SupeRo_Bot(gettercore.GetterCore):
             if checktime - self.megu_timer > 15:
                 self.send_msg("meguHands", channel)
                 self.megu_timer = checktime
+        elif username == "seal1234":
+            checktime = time.time()
+            if checktime - self.seal_spotted_timer > 14400:
+                self.send_msg("@{} seal spotted".format(username), channel)
+                self.seal_spotted_timer = checktime
