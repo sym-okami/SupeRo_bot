@@ -9,7 +9,7 @@ to actively develop it.
 ## Dependencies
 As of the latest update, this code relies on my 
 [GetterCore library](https://github.com/sym-okami/GetterCore). It should be 
-cloned to the same top-level directory as SupeRo_bot.
+cloned to the same top-level directory as SupeRo_bot.\
 Python 3.6+, may work with earlier but I was developing on 3.6.2.
 
 ## bot_auth.json format
@@ -26,5 +26,5 @@ where anything within the curly braces should be replaced with the appropriate
 values.
 
 ## Links
-[My Twitch](https://www.twitch.tv/symulacra)
+[My Twitch](https://www.twitch.tv/symulacra)\
 [SupeRo_Bot's Twitch](https://www.twitch.tv/supero_bot)
